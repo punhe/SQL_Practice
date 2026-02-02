@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Palette - kept for reference but mostly using Tailwind utility classes */
+  --color-bg: #F0F4F8;
+  --color-primary: #6366F1;
+}
+
+body {
+  font-family: var(--font-family);
+  background-image:
+    radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 0) 0, hsla(253, 16%, 7%, 0) 50%),
+    radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0) 0, hsla(225, 39%, 30%, 0) 50%);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
