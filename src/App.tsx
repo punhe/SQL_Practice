@@ -492,7 +492,8 @@ function App() {
                         <div className="relative z-10">
                             <div className="text-7xl mb-4 animate-bounce">🎉</div>
                             <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 mb-3">
-                                iuuuuuu, giõiiiiiiiii
+                                Giỏi thiệt sự luôn đóoo 🫶 Không phải ai cũng làm được đâu nha. Thưởng cho c một cái ôm thật lâu nèee 🤍✨
+                                Tự hào ghê luôn á! Cố gắng của c xứng đáng 10 điểm không có nhưnggg 💕 Giữ phong độ này nhaaa 🌟
                             </h2>
                             <p className="text-slate-600 mb-6">
                                 Bạn đã hoàn thành tất cả <span className="font-bold text-emerald-600">30 câu hỏi</span>! 🌟
