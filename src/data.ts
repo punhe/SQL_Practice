@@ -181,21 +181,21 @@ export const exercises: Exercise[] = [
     { id: 19, category: 'Aliases', question: 'Lấy product_name với alias "TenSP" và price với alias "Gia".', hint: 'SELECT col AS alias ...', expectedQuery: "SELECT product_name AS TenSP, price AS Gia FROM Products" },
 
     // === COUNT (3 câu) ===
-    { id: 20, category: 'COUNT', question: 'Đếm tổng số sản phẩm trong hệ thống.', hint: 'SELECT COUNT(*) FROM Products', expectedQuery: "SELECT COUNT(*) AS total_products FROM Products" },
-    { id: 21, category: 'COUNT', question: 'Đếm số khách hàng ở thành phố "Hà Nội".', hint: "SELECT COUNT(*) FROM Customers WHERE city = '...'", expectedQuery: "SELECT COUNT(*) AS total FROM Customers WHERE city = 'Hà Nội'" },
-    { id: 22, category: 'COUNT', question: 'Đếm số đơn hàng có trạng thái "Completed".', hint: "SELECT COUNT(*) FROM Orders WHERE status = '...'", expectedQuery: "SELECT COUNT(*) AS total FROM Orders WHERE status = 'Completed'" },
+    { id: 20, category: 'COUNT', question: 'Đếm tổng số sản phẩm trong hệ thống.', hint: 'SELECT COUNT(*) AS total_products FROM Products', expectedQuery: "SELECT COUNT(*) AS total_products FROM Products" },
+    { id: 21, category: 'COUNT', question: 'Đếm số khách hàng ở thành phố "Hà Nội".', hint: "SELECT COUNT(*) AS total FROM Customers WHERE city = '...'", expectedQuery: "SELECT COUNT(*) AS total FROM Customers WHERE city = 'Hà Nội'" },
+    { id: 22, category: 'COUNT', question: 'Đếm số đơn hàng có trạng thái "Completed".', hint: "SELECT COUNT(*) AS total FROM Orders WHERE status = '...'", expectedQuery: "SELECT COUNT(*) AS total FROM Orders WHERE status = 'Completed'" },
 
     // === SUM (3 câu) ===
-    { id: 23, category: 'SUM', question: 'Tính tổng doanh thu từ tất cả đơn hàng.', hint: 'SELECT SUM(total_amount) FROM Orders', expectedQuery: "SELECT SUM(total_amount) AS total_revenue FROM Orders" },
-    { id: 24, category: 'SUM', question: 'Tính tổng số lượng tồn kho của tất cả sản phẩm.', hint: 'SELECT SUM(stock_quantity) FROM Products', expectedQuery: "SELECT SUM(stock_quantity) AS total_stock FROM Products" },
-    { id: 25, category: 'SUM', question: 'Tính tổng số lượng sản phẩm đã bán trong OrderDetails.', hint: 'SELECT SUM(quantity) FROM OrderDetails', expectedQuery: "SELECT SUM(quantity) AS total_sold FROM OrderDetails" },
+    { id: 23, category: 'SUM', question: 'Tính tổng doanh thu từ tất cả đơn hàng.', hint: 'SELECT SUM(total_amount) AS total_revenue FROM Orders', expectedQuery: "SELECT SUM(total_amount) AS total_revenue FROM Orders" },
+    { id: 24, category: 'SUM', question: 'Tính tổng số lượng tồn kho của tất cả sản phẩm.', hint: 'SELECT SUM(stock_quantity) AS total_stock FROM Products', expectedQuery: "SELECT SUM(stock_quantity) AS total_stock FROM Products" },
+    { id: 25, category: 'SUM', question: 'Tính tổng số lượng sản phẩm đã bán trong OrderDetails.', hint: 'SELECT SUM(quantity) AS total_sold FROM OrderDetails', expectedQuery: "SELECT SUM(quantity) AS total_sold FROM OrderDetails" },
 
     // === AVG (2 câu) ===
-    { id: 26, category: 'AVG', question: 'Tính giá trung bình của tất cả sản phẩm.', hint: 'SELECT AVG(price) FROM Products', expectedQuery: "SELECT AVG(price) AS avg_price FROM Products" },
-    { id: 27, category: 'AVG', question: 'Tính giá trị trung bình của các đơn hàng.', hint: 'SELECT AVG(total_amount) FROM Orders', expectedQuery: "SELECT AVG(total_amount) AS avg_order FROM Orders" },
+    { id: 26, category: 'AVG', question: 'Tính giá trung bình của tất cả sản phẩm.', hint: 'SELECT AVG(price) AS avg_price FROM Products', expectedQuery: "SELECT AVG(price) AS avg_price FROM Products" },
+    { id: 27, category: 'AVG', question: 'Tính giá trị trung bình của các đơn hàng.', hint: 'SELECT AVG(total_amount) AS avg_order FROM Orders', expectedQuery: "SELECT AVG(total_amount) AS avg_order FROM Orders" },
 
     // === MIN / MAX (3 câu) ===
-    { id: 28, category: 'MIN / MAX', question: 'Tìm giá sản phẩm thấp nhất và cao nhất.', hint: 'SELECT MIN(price), MAX(price) FROM Products', expectedQuery: "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM Products" },
-    { id: 29, category: 'MIN / MAX', question: 'Tìm đơn hàng có giá trị nhỏ nhất.', hint: 'SELECT MIN(total_amount) FROM Orders', expectedQuery: "SELECT MIN(total_amount) AS min_order FROM Orders" },
-    { id: 30, category: 'MIN / MAX', question: 'Tìm ngày đặt hàng đầu tiên và gần nhất.', hint: 'SELECT MIN(order_date), MAX(order_date) FROM Orders', expectedQuery: "SELECT MIN(order_date) AS first_order, MAX(order_date) AS last_order FROM Orders" },
+    { id: 28, category: 'MIN / MAX', question: 'Tìm giá sản phẩm thấp nhất và cao nhất.', hint: 'SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM Products', expectedQuery: "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM Products" },
+    { id: 29, category: 'MIN / MAX', question: 'Tìm đơn hàng có giá trị nhỏ nhất.', hint: 'SELECT MIN(total_amount) AS min_order FROM Orders', expectedQuery: "SELECT MIN(total_amount) AS min_order FROM Orders" },
+    { id: 30, category: 'MIN / MAX', question: 'Tìm ngày đặt hàng đầu tiên và gần nhất.', hint: 'SELECT MIN(order_date) AS first_order, MAX(order_date) AS last_order FROM Orders', expectedQuery: "SELECT MIN(order_date) AS first_order, MAX(order_date) AS last_order FROM Orders" },
 ];
