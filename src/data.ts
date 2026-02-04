@@ -182,8 +182,8 @@ export const exercises: Exercise[] = [
 
     // === COUNT (3 câu) ===
     { id: 20, category: 'COUNT', question: 'Đếm tổng số sản phẩm trong hệ thống.', hint: 'SELECT COUNT(*) AS total_products FROM Products', expectedQuery: "SELECT COUNT(*) AS total_products FROM Products" },
-    { id: 21, category: 'COUNT', question: 'Đếm số khách hàng ở thành phố "Hà Nội".', hint: "SELECT COUNT(*) AS total FROM Customers WHERE city = '...'", expectedQuery: "SELECT COUNT(*) AS total FROM Customers WHERE city = 'Hà Nội'" },
-    { id: 22, category: 'COUNT', question: 'Đếm số đơn hàng có trạng thái "Completed".', hint: "SELECT COUNT(*) AS total FROM Orders WHERE status = '...'", expectedQuery: "SELECT COUNT(*) AS total FROM Orders WHERE status = 'Completed'" },
+    { id: 21, category: 'COUNT', question: 'Đếm số khách hàng ở thành phố "Hà Nội".', hint: "SELECT COUNT(*) AS so_luong FROM Customers WHERE city = '...'", expectedQuery: "SELECT COUNT(*) AS so_luong FROM Customers WHERE city = 'Hà Nội'" },
+    { id: 22, category: 'COUNT', question: 'Đếm số đơn hàng có trạng thái "Completed".', hint: "SELECT COUNT(*) AS so_luong FROM Orders WHERE status = '...'", expectedQuery: "SELECT COUNT(*) AS so_luong FROM Orders WHERE status = 'Completed'" },
 
     // === SUM (3 câu) ===
     { id: 23, category: 'SUM', question: 'Tính tổng doanh thu từ tất cả đơn hàng.', hint: 'SELECT SUM(total_amount) AS total_revenue FROM Orders', expectedQuery: "SELECT SUM(total_amount) AS total_revenue FROM Orders" },
