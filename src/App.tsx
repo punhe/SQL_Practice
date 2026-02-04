@@ -17,6 +17,7 @@ function App() {
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showHint, setShowHint] = useState(false);
     const [showCelebration, setShowCelebration] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(true);
 
     // DB Modal State
     const [showDbModal, setShowDbModal] = useState(false);
@@ -468,6 +469,61 @@ function App() {
                                 className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium text-xs transition-colors"
                             >
                                 Đóng
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Welcome Modal - Cute Greeting */}
+            {showWelcome && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gradient-to-br from-pink-200/90 via-purple-200/90 to-indigo-200/90 backdrop-blur-md">
+                    <div className="bg-gradient-to-br from-white to-pink-50 rounded-3xl shadow-2xl p-8 text-center max-w-lg relative overflow-hidden animate-bounce-in border-4 border-pink-200">
+                        {/* Decorative elements */}
+                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                            {/* Floating hearts */}
+                            <div className="absolute top-4 left-6 text-3xl animate-bounce" style={{ animationDelay: '0s' }}>💕</div>
+                            <div className="absolute top-6 right-8 text-2xl animate-bounce" style={{ animationDelay: '0.2s' }}>💖</div>
+                            <div className="absolute bottom-16 left-4 text-2xl animate-bounce" style={{ animationDelay: '0.4s' }}>�</div>
+                            <div className="absolute bottom-20 right-6 text-3xl animate-bounce" style={{ animationDelay: '0.1s' }}>✨</div>
+
+                            {/* Confetti */}
+                            <div className="absolute top-0 left-1/4 w-3 h-3 bg-pink-400 rounded-full animate-confetti-1"></div>
+                            <div className="absolute top-0 left-1/2 w-2 h-2 bg-purple-400 rounded-full animate-confetti-2"></div>
+                            <div className="absolute top-0 left-3/4 w-4 h-4 bg-indigo-300 rounded-full animate-confetti-3"></div>
+                            <div className="absolute top-0 left-1/3 w-2 h-2 bg-rose-400 rounded-full animate-confetti-4"></div>
+                            <div className="absolute top-0 right-1/4 w-3 h-3 bg-violet-400 rounded-full animate-confetti-5"></div>
+
+                            {/* Corner stars */}
+                            <div className="absolute top-2 left-2 text-xl">⭐</div>
+                            <div className="absolute top-2 right-2 text-xl">⭐</div>
+                            <div className="absolute bottom-2 left-2 text-xl">🌟</div>
+                            <div className="absolute bottom-2 right-2 text-xl">🌟</div>
+                        </div>
+
+                        <div className="relative z-10">
+                            {/* Cute emoji */}
+                            <div className="text-7xl mb-6">🥰</div>
+
+                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 mb-6 leading-relaxed">
+                                Giỏi thiệt sự luôn đóoo 🫶
+                                <br />
+                                Không phải ai cũng làm được đâu nha.
+                                <br />
+                                Thưởng cho c một cái ôm thật lâu nèee 🤍✨
+                                <br /><br />
+                                Tự hào ghê luôn á!
+                                <br />
+                                Cố gắng của c xứng đáng 10 điểm 💕
+                                <br />
+                                Giữ phong độ này nhaaa 🌟
+                            </h1>
+
+                            <button
+                                onClick={() => setShowWelcome(false)}
+                                className="px-8 py-3 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-lg shadow-lg shadow-purple-300/50 transition-all active:scale-95 border-2 border-white/50"
+                            >
+                                🥰 Ôkiiii �
                             </button>
                         </div>
                     </div>
