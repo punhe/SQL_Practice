@@ -33,15 +33,15 @@ function App() {
 
     // 9 phần quà với emoji và tên và ảnh
     const prizes = [
-        { id: 1, emoji: '🎁', name: 'Hộp quà bí ẩn', image: '/mystery-box.png' },
-        { id: 2, emoji: '🏆', name: 'Cúp vàng', image: '/mystery-box.png' },
-        { id: 3, emoji: '💎', name: 'Kim cương', image: '/mystery-box.png' },
-        { id: 4, emoji: '🌟', name: 'Ngôi sao may mắn', image: '/mystery-box.png' },
-        { id: 5, emoji: '🎯', name: 'Mục tiêu hoàn hảo', image: '/mystery-box.png' },
-        { id: 6, emoji: '🚀', name: 'Tên lửa thành công', image: '/mystery-box.png' },
-        { id: 7, emoji: '🎨', name: 'Bảng màu sáng tạo', image: '/mystery-box.png' },
-        { id: 8, emoji: '📚', name: 'Kho tàng tri thức', image: '/mystery-box.png' },
-        { id: 9, emoji: '🦄', name: 'Kỳ lân huyền thoại', image: '/mystery-box.png' },
+        { id: 1, emoji: '🎁', name: 'Hộp quà bí ẩn', image: '/download.jpg' },
+        { id: 2, emoji: '🏆', name: 'Cúp vàng', image: '/hong-tra-sua-kim-tuyen.png' },
+        { id: 3, emoji: '💎', name: 'Kim cương', image: '/mon-7-1691221823-6409-1691221866.jpg' },
+        { id: 4, emoji: '🌟', name: 'Ngôi sao may mắn', image: '/mon-7-1691221823-6409-1691221866.jpg' },
+        { id: 5, emoji: '🎯', name: 'Mục tiêu hoàn hảo', image: '/muc-bento-gia-bao-nhieu-mua-muc-bento-o-dau-vua-re-vua-chat-luong-202009071019512795.jpg' },
+        { id: 6, emoji: '🚀', name: 'Tên lửa thành công', image: '/thuc-hu-trung-ga-ung-la-than-duoc-tri-benh-2-12295123.jpg' },
+        { id: 7, emoji: '🎨', name: 'Bảng màu sáng tạo', image: '/unnamed.jpg' },
+        { id: 8, emoji: '📚', name: 'Kho tàng tri thức', image: '/muc-bento-gia-bao-nhieu-mua-muc-bento-o-dau-vua-re-vua-chat-luong-202009071019512795.jpg' },
+        { id: 9, emoji: '🦄', name: 'Kỳ lân huyền thoại', image: '/muc-bento-gia-bao-nhieu-mua-muc-bento-o-dau-vua-re-vua-chat-luong-202009071019512795.jpg' },
     ];
 
     // ========== SQL PRACTICE STATE ==========
