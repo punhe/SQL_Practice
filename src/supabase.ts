@@ -132,3 +132,18 @@ export async function completeExamSession(
         duration_seconds: durationSeconds
     });
 }
+
+// Kiểm tra tên người dùng đã tồn tại trong database
+export async function checkUserExists(userName: string): Promise<boolean> {
+    const { data, error } = await supabase
+        .from('exam_sessions')
+        .select('id')
+        .eq('user_name', userName)
+        .limit(1);
+
+    if (error) {
+        console.error('Error checking user:', error);
+        return false;
+    }
+    return (data && data.length > 0);
+}
