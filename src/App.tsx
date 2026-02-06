@@ -7,7 +7,7 @@ import {
 } from './data';
 import {
     ExamSession,
-    createExamSession, getActiveSession, updateExamSession, completeExamSession
+    createExamSession, getActiveSession, updateExamSession, completeExamSession, checkUserExists
 } from './supabase';
 import { LoginScreen } from './components/LoginScreen';
 import { PickPrizeScreen } from './components/PickPrizeScreen';
@@ -17,7 +17,7 @@ import { SqlWorkspace } from './components/SqlWorkspace';
 import { DatabaseModal } from './components/DatabaseModal';
 
 // Exam Config
-const EXAM_DURATION_MINUTES = 60; // 60 phút cho bài thi
+const EXAM_DURATION_MINUTES = 120; // 2 tiếng cho bài thi
 
 function App() {
     // ========== EXAM STATE ==========
@@ -146,7 +146,7 @@ function App() {
             return;
         }
 
-        // Check for existing session
+        // Check for existing session (đang làm dở)
         const existingSession = await getActiveSession(userName);
         if (existingSession) {
             // Resume session - skip pick-prize, go straight to exam
@@ -158,6 +158,13 @@ function App() {
             setActiveExercise(exercises[0]);
             setQuery(`-- ${exercises[0].question}\n`);
         } else {
+            // Kiểm tra xem tên đã tồn tại trong database chưa (đã thi trước đó)
+            const userExists = await checkUserExists(userName);
+            if (userExists) {
+                alert('Tên này đã được sử dụng! Vui lòng chọn tên khác.');
+                return;
+            }
+
             // New session - go to pick-prize first
             setSelectedPrize(null);
             setExamMode('pick-prize');
