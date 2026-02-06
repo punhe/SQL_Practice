@@ -1,13 +1,34 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import alasql from 'alasql';
 import {
-    initialProducts, initialCustomers, initialOrders, initialOrderDetails, initialSuppliers,
+    initialProducts, initialCustomers, initialOrders, initialOrderDetails, initialSuppliers, initialEmployees,
     exercises, Exercise
 } from './data';
-import { Play, RotateCcw, Database, CheckCircle2, AlertCircle, ChevronRight, Code2, CheckCircle, Lightbulb, ShoppingCart, Package, Users, FileText, Truck } from 'lucide-react';
+import {
+    supabase, ExamSession,
+    createExamSession, getActiveSession, updateExamSession, completeExamSession, getExamHistory
+} from './supabase';
+import {
+    Play, RotateCcw, Database, CheckCircle2, AlertCircle, ChevronRight, Code2, CheckCircle,
+    Lightbulb, ShoppingCart, Package, Users, FileText, Truck, Timer, Trophy, History,
+    User, LogOut, PlayCircle, Clock, Award, Target, XCircle, Pause, BookOpen
+} from 'lucide-react';
+
+// Exam Config
+const EXAM_DURATION_MINUTES = 45; // 45 phút cho bài thi
 
 function App() {
+    // ========== EXAM STATE ==========
+    const [examMode, setExamMode] = useState<'login' | 'exam' | 'result'>('login');
+    const [userName, setUserName] = useState<string>('');
+    const [currentSession, setCurrentSession] = useState<ExamSession | null>(null);
+    const [examHistory, setExamHistory] = useState<ExamSession[]>([]);
+    const [timeRemaining, setTimeRemaining] = useState<number>(EXAM_DURATION_MINUTES * 60);
+    const [isTimerPaused, setIsTimerPaused] = useState<boolean>(false);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // ========== SQL PRACTICE STATE ==========
     const [query, setQuery] = useState<string>('SELECT * FROM Products');
     const [results, setResults] = useState<any[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -16,15 +37,16 @@ function App() {
     const [completedExercises, setCompletedExercises] = useState<number[]>([]);
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showHint, setShowHint] = useState(false);
-    const [showCelebration, setShowCelebration] = useState(false);
-    const [showWelcome, setShowWelcome] = useState(true);
 
     // DB Modal State
     const [showDbModal, setShowDbModal] = useState(false);
     const [dbData, setDbData] = useState<any[]>([]);
     const [selectedTable, setSelectedTable] = useState<string>('Products');
 
-    // Initialize Database
+    // History Modal
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+    // ========== INITIALIZE DATABASE ==========
     useEffect(() => {
         if (!isInitialized) {
             // Products
@@ -52,18 +74,144 @@ function App() {
             alasql('CREATE TABLE Suppliers (supplier_id INT, supplier_name STRING, contact_name STRING, phone STRING, city STRING)');
             alasql.tables.Suppliers.data = [...initialSuppliers];
 
+            // Employees - cho Self Join
+            alasql('DROP TABLE IF EXISTS Employees');
+            alasql('CREATE TABLE Employees (employee_id INT, employee_name STRING, position STRING, manager_id INT, salary NUMBER, department STRING)');
+            alasql.tables.Employees.data = [...initialEmployees];
+
             setIsInitialized(true);
         }
     }, [isInitialized]);
 
+    // ========== TIMER LOGIC ==========
+    useEffect(() => {
+        if (examMode === 'exam' && !isTimerPaused && timeRemaining > 0) {
+            timerRef.current = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        // Hết giờ
+                        handleEndExam();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [examMode, isTimerPaused, timeRemaining]);
+
+    // ========== SAVE SESSION TO SUPABASE ==========
+    const saveSessionToSupabase = useCallback(async () => {
+        if (!currentSession?.id) return;
+
+        const elapsed = (EXAM_DURATION_MINUTES * 60) - timeRemaining;
+        await updateExamSession(currentSession.id, {
+            completed_questions: completedExercises,
+            correct_answers: completedExercises.length,
+            duration_seconds: elapsed
+        });
+    }, [currentSession, completedExercises, timeRemaining]);
+
+    // Auto-save every 30 seconds
+    useEffect(() => {
+        if (examMode === 'exam' && currentSession?.id) {
+            const autoSave = setInterval(() => {
+                saveSessionToSupabase();
+            }, 30000);
+
+            return () => clearInterval(autoSave);
+        }
+    }, [examMode, currentSession, saveSessionToSupabase]);
+
+    // ========== EXAM HANDLERS ==========
+    const handleStartExam = async () => {
+        if (!userName.trim()) {
+            alert('Vui lòng nhập tên của bạn!');
+            return;
+        }
+
+        // Check for existing session
+        const existingSession = await getActiveSession(userName);
+        if (existingSession) {
+            // Resume session
+            setCurrentSession(existingSession);
+            setCompletedExercises(existingSession.completed_questions || []);
+            const elapsed = existingSession.duration_seconds || 0;
+            setTimeRemaining(Math.max(0, (EXAM_DURATION_MINUTES * 60) - elapsed));
+        } else {
+            // Create new session
+            const newSession = await createExamSession(userName);
+            if (newSession) {
+                setCurrentSession(newSession);
+                setCompletedExercises([]);
+                setTimeRemaining(EXAM_DURATION_MINUTES * 60);
+            }
+        }
+
+        setExamMode('exam');
+        setActiveExercise(exercises[0]);
+        setQuery(`-- ${exercises[0].question}\n`);
+    };
+
+    const handleEndExam = async () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        if (currentSession?.id) {
+            const elapsed = (EXAM_DURATION_MINUTES * 60) - timeRemaining;
+            await completeExamSession(currentSession.id, completedExercises.length, elapsed);
+        }
+
+        setExamMode('result');
+    };
+
+    const handleLogout = async () => {
+        if (examMode === 'exam' && currentSession?.id) {
+            await saveSessionToSupabase();
+        }
+        setExamMode('login');
+        setCurrentSession(null);
+        setCompletedExercises([]);
+        setTimeRemaining(EXAM_DURATION_MINUTES * 60);
+        setQuery('SELECT * FROM Products');
+        setResults([]);
+        setError(null);
+        setFeedback(null);
+    };
+
+    const handleViewHistory = async () => {
+        const history = await getExamHistory(userName);
+        setExamHistory(history);
+        setShowHistoryModal(true);
+    };
+
+    const handleRestartExam = async () => {
+        const newSession = await createExamSession(userName);
+        if (newSession) {
+            setCurrentSession(newSession);
+            setCompletedExercises([]);
+            setTimeRemaining(EXAM_DURATION_MINUTES * 60);
+            setExamMode('exam');
+            setActiveExercise(exercises[0]);
+            setQuery(`-- ${exercises[0].question}\n`);
+            setResults([]);
+            setError(null);
+            setFeedback(null);
+        }
+    };
+
+    // ========== SQL LOGIC ==========
     const normalizeSQL = (sql: string) => {
         const keywords = [
-            'Products', 'Customers', 'Orders', 'OrderDetails', 'Suppliers',
+            'Products', 'Customers', 'Orders', 'OrderDetails', 'Suppliers', 'Employees',
             'product_id', 'product_name', 'category', 'price', 'stock_quantity', 'supplier_id',
             'customer_id', 'customer_name', 'email', 'phone', 'city', 'join_date',
             'order_id', 'order_date', 'total_amount', 'status',
             'detail_id', 'quantity', 'unit_price',
-            'supplier_name', 'contact_name'
+            'supplier_name', 'contact_name',
+            'employee_id', 'employee_name', 'position', 'manager_id', 'salary', 'department'
         ];
         const parts = sql.split(/(')/);
         let inString = false;
@@ -83,21 +231,47 @@ function App() {
     };
 
     const checkAnswer = (userResults: any[], currentExercise: Exercise) => {
-        if (!currentExercise.expectedQuery) return;
+        // Lấy danh sách các query đúng
+        const validQueries: string[] = [];
+        if (currentExercise.expectedQuery) {
+            validQueries.push(currentExercise.expectedQuery);
+        }
+        if (currentExercise.expectedQueries) {
+            validQueries.push(...currentExercise.expectedQueries);
+        }
+
+        if (validQueries.length === 0) return;
 
         try {
-            const expectedRes = alasql(currentExercise.expectedQuery);
             const userStr = JSON.stringify(userResults);
-            const expectedStr = JSON.stringify(expectedRes);
 
-            if (userStr === expectedStr) {
+            // Kiểm tra với từng đáp án đúng
+            let isCorrect = false;
+            for (const expectedQuery of validQueries) {
+                try {
+                    const expectedRes = alasql(expectedQuery);
+                    const expectedStr = JSON.stringify(expectedRes);
+                    if (userStr === expectedStr) {
+                        isCorrect = true;
+                        break;
+                    }
+                } catch (e) {
+                    console.error('Error checking query:', expectedQuery, e);
+                }
+            }
+
+            if (isCorrect) {
                 setFeedback({ type: 'success', message: 'Đúng rồi! Tuyệt vời! 🎉' });
                 if (!completedExercises.includes(currentExercise.id)) {
                     const newCompleted = [...completedExercises, currentExercise.id];
                     setCompletedExercises(newCompleted);
-                    // Check if all exercises completed
-                    if (newCompleted.length === exercises.length) {
-                        setTimeout(() => setShowCelebration(true), 500);
+
+                    // Auto-save khi trả lời đúng
+                    if (currentSession?.id) {
+                        updateExamSession(currentSession.id, {
+                            completed_questions: newCompleted,
+                            correct_answers: newCompleted.length
+                        });
                     }
                 }
             } else {
@@ -143,6 +317,7 @@ function App() {
         alasql.tables.Orders.data = [...initialOrders];
         alasql.tables.OrderDetails.data = [...initialOrderDetails];
         alasql.tables.Suppliers.data = [...initialSuppliers];
+        alasql.tables.Employees.data = [...initialEmployees];
         setResults([]);
         setError(null);
         setFeedback(null);
@@ -158,41 +333,208 @@ function App() {
         setShowDbModal(true);
     };
 
-    // Table info for sidebar
+    // Format time
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    // Table info
     const tables = [
         { name: 'Products', icon: Package, count: initialProducts.length },
         { name: 'Customers', icon: Users, count: initialCustomers.length },
         { name: 'Orders', icon: FileText, count: initialOrders.length },
         { name: 'OrderDetails', icon: ShoppingCart, count: initialOrderDetails.length },
         { name: 'Suppliers', icon: Truck, count: initialSuppliers.length },
+        { name: 'Employees', icon: User, count: initialEmployees.length },
     ];
 
-    // Group exercises by category
     const categories = [...new Set(exercises.map(ex => ex.category))];
 
-    return (
-        <div className="min-h-screen flex text-slate-800 bg-gradient-to-br from-emerald-50 via-white to-teal-50">
-            {/* Sidebar */}
-            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 overflow-hidden shadow-xl z-20">
-                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-white/20 p-2.5 rounded-xl">
-                            <ShoppingCart size={26} />
+    // ========== LOGIN SCREEN ==========
+    if (examMode === 'login') {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-4">
+                <div className="absolute inset-0 overflow-hidden">
+                    <div className="absolute top-20 left-20 w-72 h-72 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
+                    <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+                    <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-pink-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+                </div>
+
+                <div className="relative z-10 bg-white/10 backdrop-blur-xl rounded-3xl p-10 max-w-lg w-full border border-white/20 shadow-2xl">
+                    <div className="text-center mb-8">
+                        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl mb-4 shadow-lg shadow-emerald-500/30">
+                            <BookOpen size={40} className="text-white" />
                         </div>
+                        <h1 className="text-3xl font-black text-white mb-2">SQL JOIN Practice</h1>
+                        <p className="text-purple-200 text-sm">Bài thi thực hành SQL - Tập trung vào JOIN</p>
+                    </div>
+
+                    <div className="space-y-6">
                         <div>
-                            <h1 className="font-bold text-lg tracking-tight">Fresh Shop</h1>
-                            <p className="text-emerald-100 text-xs">SQL Practice - Cửa hàng thực phẩm</p>
+                            <label className="block text-purple-200 text-sm font-medium mb-2">
+                                <User size={14} className="inline mr-2" />
+                                Tên của bạn
+                            </label>
+                            <input
+                                type="text"
+                                value={userName}
+                                onChange={(e) => setUserName(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleStartExam()}
+                                placeholder="Nhập tên để bắt đầu..."
+                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
+                            />
+                        </div>
+
+                        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                            <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                                <Target size={16} className="text-emerald-400" />
+                                Thông tin bài thi
+                            </h3>
+                            <ul className="text-purple-200 text-sm space-y-2">
+                                <li className="flex items-center gap-2">
+                                    <Timer size={14} className="text-yellow-400" />
+                                    Thời gian: {EXAM_DURATION_MINUTES} phút
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <CheckCircle size={14} className="text-emerald-400" />
+                                    Số câu hỏi: {exercises.length} câu
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <Database size={14} className="text-blue-400" />
+                                    Chủ đề: JOIN (Inner, Left, Right, Full, Self)
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <Award size={14} className="text-pink-400" />
+                                    Tiến độ được lưu tự động
+                                </li>
+                            </ul>
+                        </div>
+
+                        <button
+                            onClick={handleStartExam}
+                            className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                            <PlayCircle size={20} />
+                            Bắt đầu làm bài
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ========== RESULT SCREEN ==========
+    if (examMode === 'result') {
+        const score = completedExercises.length;
+        const total = exercises.length;
+        const percentage = Math.round((score / total) * 100);
+        const elapsed = (EXAM_DURATION_MINUTES * 60) - timeRemaining;
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-4">
+                <div className="absolute inset-0 overflow-hidden">
+                    <div className="absolute top-20 left-20 w-72 h-72 bg-yellow-500/20 rounded-full blur-3xl animate-pulse"></div>
+                    <div className="absolute bottom-20 right-20 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl animate-pulse"></div>
+                </div>
+
+                <div className="relative z-10 bg-white/10 backdrop-blur-xl rounded-3xl p-10 max-w-lg w-full border border-white/20 shadow-2xl text-center">
+                    <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mb-6 shadow-lg shadow-yellow-500/30">
+                        <Trophy size={50} className="text-white" />
+                    </div>
+
+                    <h1 className="text-3xl font-black text-white mb-2">Kết quả bài thi</h1>
+                    <p className="text-purple-200 mb-6">Xin chúc mừng, {userName}!</p>
+
+                    <div className="bg-white/10 rounded-2xl p-6 mb-6">
+                        <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 mb-2">
+                            {score}/{total}
+                        </div>
+                        <div className="text-purple-200">
+                            Điểm số: <span className="text-white font-bold">{percentage}%</span>
+                        </div>
+                        <div className="text-purple-200 mt-2">
+                            Thời gian: <span className="text-white font-bold">{mins}:{secs.toString().padStart(2, '0')}</span>
                         </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="bg-emerald-500/20 rounded-xl p-4 border border-emerald-500/30">
+                            <CheckCircle size={24} className="text-emerald-400 mx-auto mb-2" />
+                            <div className="text-emerald-400 font-bold text-xl">{score}</div>
+                            <div className="text-emerald-200 text-xs">Câu đúng</div>
+                        </div>
+                        <div className="bg-red-500/20 rounded-xl p-4 border border-red-500/30">
+                            <XCircle size={24} className="text-red-400 mx-auto mb-2" />
+                            <div className="text-red-400 font-bold text-xl">{total - score}</div>
+                            <div className="text-red-200 text-xs">Câu chưa làm</div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleRestartExam}
+                            className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                        >
+                            <RotateCcw size={18} />
+                            Làm lại
+                        </button>
+                        <button
+                            onClick={handleLogout}
+                            className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 border border-white/20"
+                        >
+                            <LogOut size={18} />
+                            Thoát
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ========== EXAM SCREEN ==========
+    return (
+        <div className="min-h-screen flex text-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50">
+            {/* Sidebar */}
+            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 overflow-hidden shadow-xl z-20">
+                {/* Header with Timer */}
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-white/20 p-2 rounded-lg">
+                                <BookOpen size={20} />
+                            </div>
+                            <div>
+                                <h1 className="font-bold text-sm">SQL JOIN Exam</h1>
+                                <p className="text-purple-100 text-[10px]">Xin chào, {userName}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleLogout}
+                            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                            title="Lưu & Thoát"
+                        >
+                            <LogOut size={16} />
+                        </button>
+                    </div>
+
+                    {/* Timer */}
+                    <div className={`flex items-center justify-center gap-2 py-3 rounded-xl font-mono text-2xl font-bold ${timeRemaining <= 300 ? 'bg-red-500/30 animate-pulse' : 'bg-white/10'
+                        }`}>
+                        <Timer size={20} className={timeRemaining <= 300 ? 'text-red-300' : 'text-yellow-300'} />
+                        <span>{formatTime(timeRemaining)}</span>
+                    </div>
+
                     {/* Tables Quick Access */}
-                    <div className="flex flex-wrap gap-1.5 mt-3">
+                    <div className="flex flex-wrap gap-1 mt-3">
                         {tables.map(t => (
                             <button
                                 key={t.name}
                                 onClick={() => showTable(t.name)}
-                                className="flex items-center gap-1 bg-white/15 hover:bg-white/25 px-2 py-1 rounded-md text-[10px] font-medium transition-colors"
-                                title={`Xem bảng ${t.name}`}
+                                className="flex items-center gap-1 bg-white/15 hover:bg-white/25 px-2 py-1 rounded-md text-[9px] font-medium transition-colors"
                             >
                                 <t.icon size={10} />
                                 {t.name}
@@ -200,18 +542,20 @@ function App() {
                         ))}
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-emerald-100 font-medium uppercase tracking-wider mt-4">
+                    {/* Progress */}
+                    <div className="flex items-center justify-between text-xs text-purple-100 font-medium mt-3">
                         <span>Tiến độ</span>
-                        <span>{completedExercises.length}/{exercises.length}</span>
+                        <span className="font-bold text-white">{completedExercises.length}/{exercises.length}</span>
                     </div>
-                    <div className="w-full bg-emerald-900/30 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="w-full bg-white/20 h-2 rounded-full mt-1.5 overflow-hidden">
                         <div
-                            className="bg-yellow-400 h-full transition-all duration-500"
+                            className="bg-gradient-to-r from-yellow-400 to-orange-400 h-full transition-all duration-500"
                             style={{ width: `${(completedExercises.length / exercises.length) * 100}%` }}
                         ></div>
                     </div>
                 </div>
 
+                {/* Exercise List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-4 scroll-smooth">
                     {categories.map((cat) => {
                         const catExercises = exercises.filter(e => e.category === cat);
@@ -230,18 +574,18 @@ function App() {
                                                 key={ex.id}
                                                 onClick={() => handleExerciseClick(ex)}
                                                 className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 flex items-start gap-2 group relative ${isActive
-                                                    ? 'bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-200'
+                                                    ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
                                                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                                                     }`}
                                             >
-                                                <div className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[8px] transition-colors ${isCompleted
+                                                <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] transition-colors ${isCompleted
                                                     ? 'bg-emerald-500 text-white'
-                                                    : isActive ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+                                                    : isActive ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
                                                     }`}>
-                                                    {isCompleted ? <CheckCircle size={10} /> : ex.id}
+                                                    {isCompleted ? <CheckCircle size={12} /> : ex.id}
                                                 </div>
                                                 <span className="line-clamp-2 pr-3 leading-tight">{ex.question}</span>
-                                                {isActive && <ChevronRight size={12} className="ml-auto absolute right-2 top-2.5 text-emerald-400" />}
+                                                {isActive && <ChevronRight size={12} className="ml-auto absolute right-2 top-2.5 text-indigo-400" />}
                                             </button>
                                         )
                                     })}
@@ -250,21 +594,32 @@ function App() {
                         );
                     })}
                 </div>
+
+                {/* Actions */}
+                <div className="p-3 border-t border-slate-200 bg-slate-50 space-y-2">
+                    <button
+                        onClick={handleEndExam}
+                        className="w-full py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                    >
+                        <CheckCircle2 size={16} />
+                        Nộp bài
+                    </button>
+                </div>
             </aside>
 
             {/* Main Content */}
             <main className="flex-1 ml-80 p-5 max-w-7xl mx-auto flex flex-col h-screen overflow-hidden">
 
-                {/* Header / Question Area */}
+                {/* Question Area */}
                 <div className="mb-4 flex-shrink-0">
-                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 relative overflow-hidden group">
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                             <Code2 size={80} />
                         </div>
                         <div className="relative z-10 w-full">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide">
+                                    <span className="bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-xs font-bold">
                                         Câu {activeExercise?.id}
                                     </span>
                                     <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">
@@ -312,7 +667,6 @@ function App() {
                             <button
                                 onClick={resetDatabase}
                                 className="text-xs flex items-center gap-1 text-slate-500 hover:text-red-600 transition-colors font-medium px-2 py-1 hover:bg-slate-200 rounded"
-                                title="Reset Database"
                             >
                                 <RotateCcw size={12} /> Reset DB
                             </button>
@@ -321,13 +675,13 @@ function App() {
                             <textarea
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                className="w-full h-32 p-4 font-mono text-sm outline-none resize-none bg-[#1a1a2e] text-[#cdd6f4] selection:bg-emerald-500/50"
+                                className="w-full h-32 p-4 font-mono text-sm outline-none resize-none bg-[#1e1e3f] text-[#a5d6ff] selection:bg-indigo-500/50"
                                 spellCheck="false"
                                 placeholder="-- Viết câu lệnh SQL ở đây..."
                             />
                             <button
                                 onClick={() => runQuery(query)}
-                                className="absolute bottom-3 right-3 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-1.5 rounded-lg font-medium shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 active:scale-95 z-10 text-sm"
+                                className="absolute bottom-3 right-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-5 py-1.5 rounded-lg font-medium shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 active:scale-95 z-10 text-sm"
                             >
                                 <Play size={14} fill="currentColor" /> Chạy Query
                             </button>
@@ -338,14 +692,14 @@ function App() {
                                     <button
                                         key={t.name}
                                         onClick={() => showTable(t.name)}
-                                        className="text-[10px] text-slate-400 hover:text-emerald-600 font-medium flex items-center gap-1 hover:underline underline-offset-2"
+                                        className="text-[10px] text-slate-400 hover:text-indigo-600 font-medium flex items-center gap-1 hover:underline underline-offset-2"
                                     >
                                         <t.icon size={10} />
                                         {t.name}
                                     </button>
                                 ))}
                             </div>
-                            <span className="text-[10px] text-slate-400">5 bảng dữ liệu</span>
+                            <span className="text-[10px] text-slate-400">{tables.length} bảng dữ liệu</span>
                         </div>
                     </div>
 
@@ -414,9 +768,9 @@ function App() {
             {showDbModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50">
+                        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
                             <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                <Database size={18} className="text-emerald-600" />
+                                <Database size={18} className="text-indigo-600" />
                                 Bảng {selectedTable} ({dbData.length} dòng)
                             </h3>
                             <div className="flex items-center gap-2">
@@ -425,7 +779,7 @@ function App() {
                                         key={t.name}
                                         onClick={() => showTable(t.name)}
                                         className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${selectedTable === t.name
-                                            ? 'bg-emerald-600 text-white'
+                                            ? 'bg-indigo-600 text-white'
                                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                                     >
                                         {t.name}
@@ -452,7 +806,7 @@ function App() {
                                 </thead>
                                 <tbody>
                                     {dbData.map((row: any, i: number) => (
-                                        <tr key={i} className="hover:bg-emerald-50/50 transition-colors border-b border-slate-100 last:border-0">
+                                        <tr key={i} className="hover:bg-indigo-50/50 transition-colors border-b border-slate-100 last:border-0">
                                             {Object.values(row).map((val: any, j: number) => (
                                                 <td key={j} className="p-2.5 border-r border-slate-100 last:border-r-0 text-slate-600">
                                                     {val === null ? <span className="text-slate-300 italic">NULL</span> : String(val)}
@@ -470,98 +824,6 @@ function App() {
                             >
                                 Đóng
                             </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Welcome Modal - Cute Greeting */}
-            {showWelcome && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gradient-to-br from-pink-200/90 via-purple-200/90 to-indigo-200/90 backdrop-blur-md">
-                    <div className="bg-gradient-to-br from-white to-pink-50 rounded-3xl shadow-2xl p-8 text-center max-w-lg relative overflow-hidden animate-bounce-in border-4 border-pink-200">
-                        {/* Decorative elements */}
-                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            {/* Floating hearts */}
-                            <div className="absolute top-4 left-6 text-3xl animate-bounce" style={{ animationDelay: '0s' }}>💕</div>
-                            <div className="absolute top-6 right-8 text-2xl animate-bounce" style={{ animationDelay: '0.2s' }}>💖</div>
-                            <div className="absolute bottom-16 left-4 text-2xl animate-bounce" style={{ animationDelay: '0.4s' }}>�</div>
-                            <div className="absolute bottom-20 right-6 text-3xl animate-bounce" style={{ animationDelay: '0.1s' }}>✨</div>
-
-                            {/* Confetti */}
-                            <div className="absolute top-0 left-1/4 w-3 h-3 bg-pink-400 rounded-full animate-confetti-1"></div>
-                            <div className="absolute top-0 left-1/2 w-2 h-2 bg-purple-400 rounded-full animate-confetti-2"></div>
-                            <div className="absolute top-0 left-3/4 w-4 h-4 bg-indigo-300 rounded-full animate-confetti-3"></div>
-                            <div className="absolute top-0 left-1/3 w-2 h-2 bg-rose-400 rounded-full animate-confetti-4"></div>
-                            <div className="absolute top-0 right-1/4 w-3 h-3 bg-violet-400 rounded-full animate-confetti-5"></div>
-
-                            {/* Corner stars */}
-                            <div className="absolute top-2 left-2 text-xl">⭐</div>
-                            <div className="absolute top-2 right-2 text-xl">⭐</div>
-                            <div className="absolute bottom-2 left-2 text-xl">🌟</div>
-                            <div className="absolute bottom-2 right-2 text-xl">🌟</div>
-                        </div>
-
-                        <div className="relative z-10">
-                            {/* Cute emoji */}
-                            <div className="text-7xl mb-6">🥰</div>
-
-                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 mb-6 leading-relaxed">
-                                Giỏi thiệt sự luôn đóoo 🫶
-                                <br />
-                                Không phải ai cũng làm được đâu nha.
-                                <br />
-                                Thưởng cho c một cái ôm thật lâu nèee 🤍✨
-                                <br /><br />
-                                Tự hào ghê luôn á!
-                                <br />
-                                Cố gắng của c xứng đáng 10 điểm 💕
-                                <br />
-                                Giữ phong độ này nhaaa 🌟
-                            </h1>
-
-                            <button
-                                onClick={() => setShowWelcome(false)}
-                                className="px-8 py-3 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-lg shadow-lg shadow-purple-300/50 transition-all active:scale-95 border-2 border-white/50"
-                            >
-                                🥰 Ôkiiii �
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Celebration Modal */}
-            {showCelebration && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-                    <div className="bg-white rounded-3xl shadow-2xl p-10 text-center max-w-md relative overflow-hidden animate-bounce-in">
-                        {/* Confetti Background */}
-                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <div className="absolute top-0 left-1/4 w-3 h-3 bg-yellow-400 rounded-full animate-confetti-1"></div>
-                            <div className="absolute top-0 left-1/2 w-2 h-2 bg-pink-500 rounded-full animate-confetti-2"></div>
-                            <div className="absolute top-0 left-3/4 w-4 h-4 bg-emerald-400 rounded-full animate-confetti-3"></div>
-                            <div className="absolute top-0 left-1/3 w-2 h-2 bg-blue-500 rounded-full animate-confetti-4"></div>
-                            <div className="absolute top-0 right-1/4 w-3 h-3 bg-purple-500 rounded-full animate-confetti-5"></div>
-                            <div className="absolute top-0 left-10 w-2 h-2 bg-red-400 rounded-full animate-confetti-6"></div>
-                            <div className="absolute top-0 right-10 w-3 h-3 bg-orange-400 rounded-full animate-confetti-7"></div>
-                        </div>
-
-                        <div className="relative z-10">
-                            <div className="text-7xl mb-4 animate-bounce">🎉</div>
-                            <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 mb-3">
-                                Giỏi thiệt sự luôn đóoo 🫶 Không phải ai cũng làm được đâu nha. Thưởng cho c một cái ôm thật lâu nèee 🤍✨
-                                Tự hào ghê luôn á! Cố gắng của c xứng đáng 10 điểm không có nhưnggg 💕 Giữ phong độ này nhaaa 🌟
-                            </h2>
-                            <p className="text-slate-600 mb-6">
-                                Bạn đã hoàn thành tất cả <span className="font-bold text-emerald-600">30 câu hỏi</span>! 🌟
-                            </p>
-                            <div className="flex justify-center gap-3">
-                                <button
-                                    onClick={() => setShowCelebration(false)}
-                                    className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition-all active:scale-95"
-                                >
-                                    Tuyệt vời! 🚀
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
