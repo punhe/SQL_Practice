@@ -43,6 +43,15 @@ export interface Supplier {
     city: string;
 }
 
+export interface Employee {
+    employee_id: number;
+    employee_name: string;
+    position: string;
+    manager_id: number | null;
+    salary: number;
+    department: string;
+}
+
 // ========== INITIAL DATA ==========
 
 export const initialProducts: Product[] = [
@@ -134,68 +143,18 @@ export const initialSuppliers: Supplier[] = [
     { supplier_id: 9, supplier_name: 'Nước Mắm Phú Quốc', contact_name: 'Bùi Văn Thành', phone: '0289012345', city: 'Kiên Giang' },
 ];
 
-// ========== EXERCISES ==========
-
-export interface Exercise {
-    id: number;
-    category: string;
-    question: string;
-    hint: string;
-    expectedQuery?: string;
-}
-
-export const exercises: Exercise[] = [
-    // === SELECT Cơ Bản (3 câu) ===
-    { id: 1, category: 'SELECT Cơ Bản', question: 'Lấy tất cả thông tin sản phẩm.', hint: 'SELECT * FROM Products', expectedQuery: "SELECT * FROM Products" },
-    { id: 2, category: 'SELECT Cơ Bản', question: 'Lấy tên và giá của tất cả sản phẩm.', hint: 'SELECT product_name, price FROM ...', expectedQuery: "SELECT product_name, price FROM Products" },
-    { id: 3, category: 'SELECT Cơ Bản', question: 'Lấy danh sách khách hàng (customer_name, city).', hint: 'SELECT col1, col2 FROM Customers', expectedQuery: "SELECT customer_name, city FROM Customers" },
-
-    // === DISTINCT (2 câu) ===
-    { id: 4, category: 'DISTINCT', question: 'Lấy danh sách các danh mục sản phẩm không trùng lặp.', hint: 'SELECT DISTINCT category FROM ...', expectedQuery: "SELECT DISTINCT category FROM Products" },
-    { id: 5, category: 'DISTINCT', question: 'Lấy danh sách các thành phố của khách hàng không trùng lặp.', hint: 'SELECT DISTINCT city FROM ...', expectedQuery: "SELECT DISTINCT city FROM Customers" },
-
-    // === WHERE (4 câu) ===
-    { id: 6, category: 'WHERE', question: 'Tìm sản phẩm có giá lớn hơn 100,000đ.', hint: 'WHERE price > 100000', expectedQuery: "SELECT * FROM Products WHERE price > 100000" },
-    { id: 7, category: 'WHERE', question: 'Tìm khách hàng ở thành phố "Hà Nội".', hint: "WHERE city = 'Hà Nội'", expectedQuery: "SELECT * FROM Customers WHERE city = 'Hà Nội'" },
-    { id: 8, category: 'WHERE', question: 'Tìm đơn hàng có trạng thái "Completed".', hint: "WHERE status = 'Completed'", expectedQuery: "SELECT * FROM Orders WHERE status = 'Completed'" },
-    { id: 9, category: 'WHERE', question: 'Tìm sản phẩm có số lượng tồn kho dưới 50.', hint: 'WHERE stock_quantity < 50', expectedQuery: "SELECT * FROM Products WHERE stock_quantity < 50" },
-
-    // === ORDER BY (2 câu) ===
-    { id: 10, category: 'ORDER BY', question: 'Lấy tất cả sản phẩm sắp xếp theo giá tăng dần.', hint: 'ORDER BY price ASC', expectedQuery: "SELECT * FROM Products ORDER BY price ASC" },
-    { id: 11, category: 'ORDER BY', question: 'Lấy tất cả đơn hàng sắp xếp theo tổng tiền giảm dần.', hint: 'ORDER BY total_amount DESC', expectedQuery: "SELECT * FROM Orders ORDER BY total_amount DESC" },
-
-    // === AND / OR / NOT (3 câu) ===
-    { id: 12, category: 'AND / OR / NOT', question: 'Tìm sản phẩm thuộc danh mục "Trái cây" VÀ giá dưới 50,000đ.', hint: "WHERE category = '...' AND price < ...", expectedQuery: "SELECT * FROM Products WHERE category = 'Trái cây' AND price < 50000" },
-    { id: 13, category: 'AND / OR / NOT', question: 'Tìm đơn hàng có trạng thái "Completed" HOẶC "Pending".', hint: "WHERE status = '...' OR status = '...'", expectedQuery: "SELECT * FROM Orders WHERE status = 'Completed' OR status = 'Pending'" },
-    { id: 14, category: 'AND / OR / NOT', question: 'Tìm sản phẩm KHÔNG thuộc danh mục "Sữa".', hint: "WHERE category <> 'Sữa'", expectedQuery: "SELECT * FROM Products WHERE category <> 'Sữa'" },
-
-    // === IN / BETWEEN (2 câu) ===
-    { id: 15, category: 'IN / BETWEEN', question: 'Tìm sản phẩm thuộc danh mục "Thịt", "Hải sản" hoặc "Trứng".', hint: "WHERE category IN (...)", expectedQuery: "SELECT * FROM Products WHERE category IN ('Thịt', 'Hải sản', 'Trứng')" },
-    { id: 16, category: 'IN / BETWEEN', question: 'Tìm đơn hàng có tổng tiền từ 300,000đ đến 600,000đ.', hint: 'WHERE total_amount BETWEEN ... AND ...', expectedQuery: "SELECT * FROM Orders WHERE total_amount BETWEEN 300000 AND 600000" },
-
-    // === LIKE (2 câu) ===
-    { id: 17, category: 'LIKE', question: 'Tìm sản phẩm có tên bắt đầu bằng "Thịt".', hint: "WHERE product_name LIKE 'Thịt%'", expectedQuery: "SELECT * FROM Products WHERE product_name LIKE 'Thịt%'" },
-    { id: 18, category: 'LIKE', question: 'Tìm khách hàng có email chứa "gmail".', hint: "WHERE email LIKE '%gmail%'", expectedQuery: "SELECT * FROM Customers WHERE email LIKE '%gmail%'" },
-
-    // === Aliases (1 câu) ===
-    { id: 19, category: 'Aliases', question: 'Lấy product_name với alias "TenSP" và price với alias "Gia".', hint: 'SELECT col AS alias ...', expectedQuery: "SELECT product_name AS TenSP, price AS Gia FROM Products" },
-
-    // === COUNT (3 câu) ===
-    { id: 20, category: 'COUNT', question: 'Đếm tổng số sản phẩm trong hệ thống.', hint: 'SELECT COUNT(*) AS total_products FROM Products', expectedQuery: "SELECT COUNT(*) AS total_products FROM Products" },
-    { id: 21, category: 'COUNT', question: 'Đếm số khách hàng ở thành phố "Hà Nội".', hint: "SELECT COUNT(*) AS so_luong FROM Customers WHERE city = '...'", expectedQuery: "SELECT COUNT(*) AS so_luong FROM Customers WHERE city = 'Hà Nội'" },
-    { id: 22, category: 'COUNT', question: 'Đếm số đơn hàng có trạng thái "Completed".', hint: "SELECT COUNT(*) AS so_luong FROM Orders WHERE status = '...'", expectedQuery: "SELECT COUNT(*) AS so_luong FROM Orders WHERE status = 'Completed'" },
-
-    // === SUM (3 câu) ===
-    { id: 23, category: 'SUM', question: 'Tính tổng doanh thu từ tất cả đơn hàng.', hint: 'SELECT SUM(total_amount) AS total_revenue FROM Orders', expectedQuery: "SELECT SUM(total_amount) AS total_revenue FROM Orders" },
-    { id: 24, category: 'SUM', question: 'Tính tổng số lượng tồn kho của tất cả sản phẩm.', hint: 'SELECT SUM(stock_quantity) AS total_stock FROM Products', expectedQuery: "SELECT SUM(stock_quantity) AS total_stock FROM Products" },
-    { id: 25, category: 'SUM', question: 'Tính tổng số lượng sản phẩm đã bán trong OrderDetails.', hint: 'SELECT SUM(quantity) AS total_sold FROM OrderDetails', expectedQuery: "SELECT SUM(quantity) AS total_sold FROM OrderDetails" },
-
-    // === AVG (2 câu) ===
-    { id: 26, category: 'AVG', question: 'Tính giá trung bình của tất cả sản phẩm.', hint: 'SELECT AVG(price) AS avg_price FROM Products', expectedQuery: "SELECT AVG(price) AS avg_price FROM Products" },
-    { id: 27, category: 'AVG', question: 'Tính giá trị trung bình của các đơn hàng.', hint: 'SELECT AVG(total_amount) AS avg_order FROM Orders', expectedQuery: "SELECT AVG(total_amount) AS avg_order FROM Orders" },
-
-    // === MIN / MAX (3 câu) ===
-    { id: 28, category: 'MIN / MAX', question: 'Tìm giá sản phẩm thấp nhất và cao nhất.', hint: 'SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM Products', expectedQuery: "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM Products" },
-    { id: 29, category: 'MIN / MAX', question: 'Tìm đơn hàng có giá trị nhỏ nhất.', hint: 'SELECT MIN(total_amount) AS min_order FROM Orders', expectedQuery: "SELECT MIN(total_amount) AS min_order FROM Orders" },
-    { id: 30, category: 'MIN / MAX', question: 'Tìm ngày đặt hàng đầu tiên và gần nhất.', hint: 'SELECT MIN(order_date) AS first_order, MAX(order_date) AS last_order FROM Orders', expectedQuery: "SELECT MIN(order_date) AS first_order, MAX(order_date) AS last_order FROM Orders" },
+// Thêm bảng Employees cho SELF JOIN
+export const initialEmployees: Employee[] = [
+    { employee_id: 1, employee_name: 'Nguyễn Minh Quản', position: 'Giám đốc', manager_id: null, salary: 50000000, department: 'Ban Giám Đốc' },
+    { employee_id: 2, employee_name: 'Trần Văn Trưởng', position: 'Trưởng phòng Kinh doanh', manager_id: 1, salary: 30000000, department: 'Kinh doanh' },
+    { employee_id: 3, employee_name: 'Lê Thị Hà', position: 'Trưởng phòng Kho', manager_id: 1, salary: 28000000, department: 'Kho vận' },
+    { employee_id: 4, employee_name: 'Phạm Anh Tuấn', position: 'Nhân viên Kinh doanh', manager_id: 2, salary: 15000000, department: 'Kinh doanh' },
+    { employee_id: 5, employee_name: 'Hoàng Thị Mai', position: 'Nhân viên Kinh doanh', manager_id: 2, salary: 14000000, department: 'Kinh doanh' },
+    { employee_id: 6, employee_name: 'Vũ Văn Nam', position: 'Nhân viên Kho', manager_id: 3, salary: 12000000, department: 'Kho vận' },
+    { employee_id: 7, employee_name: 'Đỗ Thị Lan', position: 'Nhân viên Kho', manager_id: 3, salary: 11000000, department: 'Kho vận' },
+    { employee_id: 8, employee_name: 'Ngô Quốc Bảo', position: 'Thực tập sinh', manager_id: 4, salary: 5000000, department: 'Kinh doanh' },
 ];
+
+// ========== EXERCISES ==========
+// Import từ file riêng để dễ quản lý
+export { exercises, type Exercise } from './exercises';

@@ -1,13 +1,50 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import alasql from 'alasql';
 import {
-    initialProducts, initialCustomers, initialOrders, initialOrderDetails, initialSuppliers,
+    initialProducts, initialCustomers, initialOrders, initialOrderDetails, initialSuppliers, initialEmployees,
     exercises, Exercise
 } from './data';
-import { Play, RotateCcw, Database, CheckCircle2, AlertCircle, ChevronRight, Code2, CheckCircle, Lightbulb, ShoppingCart, Package, Users, FileText, Truck } from 'lucide-react';
+import {
+    ExamSession,
+    createExamSession, getActiveSession, updateExamSession, completeExamSession
+} from './supabase';
+import { LoginScreen } from './components/LoginScreen';
+import { PickPrizeScreen } from './components/PickPrizeScreen';
+import { ResultScreen } from './components/ResultScreen';
+import { Sidebar } from './components/Sidebar';
+import { SqlWorkspace } from './components/SqlWorkspace';
+import { DatabaseModal } from './components/DatabaseModal';
+
+// Exam Config
+const EXAM_DURATION_MINUTES = 60; // 60 phút cho bài thi
 
 function App() {
+    // ========== EXAM STATE ==========
+    const [examMode, setExamMode] = useState<'login' | 'pick-prize' | 'exam' | 'result'>('login');
+    const [userName, setUserName] = useState<string>('');
+    const [currentSession, setCurrentSession] = useState<ExamSession | null>(null);
+    const [timeRemaining, setTimeRemaining] = useState<number>(EXAM_DURATION_MINUTES * 60);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // ========== PRIZE MINI-GAME STATE ==========
+    const [selectedPrize, setSelectedPrize] = useState<number | null>(null);
+    const [isFlipping, setIsFlipping] = useState<boolean>(false);
+
+    // 9 phần quà với emoji và tên và ảnh
+    const prizes = [
+        { id: 1, emoji: '🎁', name: 'Hộp quà bí ẩn', image: '/download.jpg' },
+        { id: 2, emoji: '🏆', name: 'Cúp vàng', image: '/hong-tra-sua-kim-tuyen.png' },
+        { id: 3, emoji: '💎', name: 'Kim cương', image: '/mon-7-1691221823-6409-1691221866.jpg' },
+        { id: 4, emoji: '🌟', name: 'Ngôi sao may mắn', image: '/mon-7-1691221823-6409-1691221866.jpg' },
+        { id: 5, emoji: '🎯', name: 'Mục tiêu hoàn hảo', image: '/muc-bento-gia-bao-nhieu-mua-muc-bento-o-dau-vua-re-vua-chat-luong-202009071019512795.jpg' },
+        { id: 6, emoji: '🚀', name: 'Tên lửa thành công', image: '/thuc-hu-trung-ga-ung-la-than-duoc-tri-benh-2-12295123.jpg' },
+        { id: 7, emoji: '🎨', name: 'Bảng màu sáng tạo', image: '/unnamed.jpg' },
+        { id: 8, emoji: '📚', name: 'Kho tàng tri thức', image: '/muc-bento-gia-bao-nhieu-mua-muc-bento-o-dau-vua-re-vua-chat-luong-202009071019512795.jpg' },
+        { id: 9, emoji: '🦄', name: 'Kỳ lân huyền thoại', image: '/muc-bento-gia-bao-nhieu-mua-muc-bento-o-dau-vua-re-vua-chat-luong-202009071019512795.jpg' },
+    ];
+
+    // ========== SQL PRACTICE STATE ==========
     const [query, setQuery] = useState<string>('SELECT * FROM Products');
     const [results, setResults] = useState<any[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -16,15 +53,13 @@ function App() {
     const [completedExercises, setCompletedExercises] = useState<number[]>([]);
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showHint, setShowHint] = useState(false);
-    const [showCelebration, setShowCelebration] = useState(false);
-    const [showWelcome, setShowWelcome] = useState(true);
 
     // DB Modal State
     const [showDbModal, setShowDbModal] = useState(false);
     const [dbData, setDbData] = useState<any[]>([]);
     const [selectedTable, setSelectedTable] = useState<string>('Products');
 
-    // Initialize Database
+    // ========== INITIALIZE DATABASE ==========
     useEffect(() => {
         if (!isInitialized) {
             // Products
@@ -52,18 +87,157 @@ function App() {
             alasql('CREATE TABLE Suppliers (supplier_id INT, supplier_name STRING, contact_name STRING, phone STRING, city STRING)');
             alasql.tables.Suppliers.data = [...initialSuppliers];
 
+            // Employees - cho Self Join
+            alasql('DROP TABLE IF EXISTS Employees');
+            alasql('CREATE TABLE Employees (employee_id INT, employee_name STRING, position STRING, manager_id INT, salary NUMBER, department STRING)');
+            alasql.tables.Employees.data = [...initialEmployees];
+
             setIsInitialized(true);
         }
     }, [isInitialized]);
 
+    // ========== TIMER LOGIC ==========
+    useEffect(() => {
+        if (examMode === 'exam' && timeRemaining > 0) {
+            timerRef.current = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        // Hết giờ
+                        handleEndExam();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [examMode, timeRemaining]);
+
+    // ========== SAVE SESSION TO SUPABASE ==========
+    const saveSessionToSupabase = useCallback(async () => {
+        if (!currentSession?.id) return;
+
+        const elapsed = (EXAM_DURATION_MINUTES * 60) - timeRemaining;
+        await updateExamSession(currentSession.id, {
+            completed_questions: completedExercises,
+            correct_answers: completedExercises.length,
+            duration_seconds: elapsed
+        });
+    }, [currentSession, completedExercises, timeRemaining]);
+
+    // Auto-save every 30 seconds
+    useEffect(() => {
+        if (examMode === 'exam' && currentSession?.id) {
+            const autoSave = setInterval(() => {
+                saveSessionToSupabase();
+            }, 30000);
+
+            return () => clearInterval(autoSave);
+        }
+    }, [examMode, currentSession, saveSessionToSupabase]);
+
+    // ========== EXAM HANDLERS ==========
+    const handleStartExam = async () => {
+        if (!userName.trim()) {
+            alert('Vui lòng nhập tên của bạn!');
+            return;
+        }
+
+        // Check for existing session
+        const existingSession = await getActiveSession(userName);
+        if (existingSession) {
+            // Resume session - skip pick-prize, go straight to exam
+            setCurrentSession(existingSession);
+            setCompletedExercises(existingSession.completed_questions || []);
+            const elapsed = existingSession.duration_seconds || 0;
+            setTimeRemaining(Math.max(0, (EXAM_DURATION_MINUTES * 60) - elapsed));
+            setExamMode('exam');
+            setActiveExercise(exercises[0]);
+            setQuery(`-- ${exercises[0].question}\n`);
+        } else {
+            // New session - go to pick-prize first
+            setSelectedPrize(null);
+            setExamMode('pick-prize');
+        }
+    };
+
+    const handlePrizeSelect = async (prizeId: number) => {
+        if (isFlipping || selectedPrize !== null) return;
+
+        setIsFlipping(true);
+        setSelectedPrize(prizeId);
+
+        // Wait for connection/animation, then start exam
+        setTimeout(async () => {
+            // Create new session
+            const newSession = await createExamSession(userName);
+            if (newSession) {
+                setCurrentSession(newSession);
+                setCompletedExercises([]);
+                setTimeRemaining(EXAM_DURATION_MINUTES * 60);
+            }
+
+            setExamMode('exam');
+            setActiveExercise(exercises[0]);
+            setQuery(`-- ${exercises[0].question}\n`);
+            setIsFlipping(false);
+        }, 1000); // Wait 1s
+    };
+
+    const handleEndExam = async () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        if (currentSession?.id) {
+            const elapsed = (EXAM_DURATION_MINUTES * 60) - timeRemaining;
+            await completeExamSession(currentSession.id, completedExercises.length, elapsed);
+        }
+
+        setExamMode('result');
+    };
+
+    const handleLogout = async () => {
+        if (examMode === 'exam' && currentSession?.id) {
+            await saveSessionToSupabase();
+        }
+        setExamMode('login');
+        setCurrentSession(null);
+        setCompletedExercises([]);
+        setTimeRemaining(EXAM_DURATION_MINUTES * 60);
+        setQuery('SELECT * FROM Products');
+        setResults([]);
+        setError(null);
+        setFeedback(null);
+        setSelectedPrize(null);
+    };
+
+    const handleRestartExam = async () => {
+        const newSession = await createExamSession(userName);
+        if (newSession) {
+            setCurrentSession(newSession);
+            setCompletedExercises([]);
+            setTimeRemaining(EXAM_DURATION_MINUTES * 60);
+            setExamMode('exam');
+            setActiveExercise(exercises[0]);
+            setQuery(`-- ${exercises[0].question}\n`);
+            setResults([]);
+            setError(null);
+            setFeedback(null);
+        }
+    };
+
+    // ========== SQL LOGIC ==========
     const normalizeSQL = (sql: string) => {
         const keywords = [
-            'Products', 'Customers', 'Orders', 'OrderDetails', 'Suppliers',
+            'Products', 'Customers', 'Orders', 'OrderDetails', 'Suppliers', 'Employees',
             'product_id', 'product_name', 'category', 'price', 'stock_quantity', 'supplier_id',
             'customer_id', 'customer_name', 'email', 'phone', 'city', 'join_date',
             'order_id', 'order_date', 'total_amount', 'status',
             'detail_id', 'quantity', 'unit_price',
-            'supplier_name', 'contact_name'
+            'supplier_name', 'contact_name',
+            'employee_id', 'employee_name', 'position', 'manager_id', 'salary', 'department'
         ];
         const parts = sql.split(/(')/);
         let inString = false;
@@ -83,21 +257,47 @@ function App() {
     };
 
     const checkAnswer = (userResults: any[], currentExercise: Exercise) => {
-        if (!currentExercise.expectedQuery) return;
+        // Lấy danh sách các query đúng
+        const validQueries: string[] = [];
+        if (currentExercise.expectedQuery) {
+            validQueries.push(currentExercise.expectedQuery);
+        }
+        if (currentExercise.expectedQueries) {
+            validQueries.push(...currentExercise.expectedQueries);
+        }
+
+        if (validQueries.length === 0) return;
 
         try {
-            const expectedRes = alasql(currentExercise.expectedQuery);
             const userStr = JSON.stringify(userResults);
-            const expectedStr = JSON.stringify(expectedRes);
 
-            if (userStr === expectedStr) {
+            // Kiểm tra với từng đáp án đúng
+            let isCorrect = false;
+            for (const expectedQuery of validQueries) {
+                try {
+                    const expectedRes = alasql(expectedQuery);
+                    const expectedStr = JSON.stringify(expectedRes);
+                    if (userStr === expectedStr) {
+                        isCorrect = true;
+                        break;
+                    }
+                } catch (e) {
+                    console.error('Error checking query:', expectedQuery, e);
+                }
+            }
+
+            if (isCorrect) {
                 setFeedback({ type: 'success', message: 'Đúng rồi! Tuyệt vời! 🎉' });
                 if (!completedExercises.includes(currentExercise.id)) {
                     const newCompleted = [...completedExercises, currentExercise.id];
                     setCompletedExercises(newCompleted);
-                    // Check if all exercises completed
-                    if (newCompleted.length === exercises.length) {
-                        setTimeout(() => setShowCelebration(true), 500);
+
+                    // Auto-save khi trả lời đúng
+                    if (currentSession?.id) {
+                        updateExamSession(currentSession.id, {
+                            completed_questions: newCompleted,
+                            correct_answers: newCompleted.length
+                        });
                     }
                 }
             } else {
@@ -143,13 +343,12 @@ function App() {
         alasql.tables.Orders.data = [...initialOrders];
         alasql.tables.OrderDetails.data = [...initialOrderDetails];
         alasql.tables.Suppliers.data = [...initialSuppliers];
+        alasql.tables.Employees.data = [...initialEmployees];
         setResults([]);
         setError(null);
         setFeedback(null);
         setQuery('SELECT * FROM Products');
     };
-
-    const formatHeader = (key: string) => key;
 
     const showTable = (tableName: string) => {
         const data = alasql(`SELECT * FROM ${tableName}`);
@@ -158,414 +357,83 @@ function App() {
         setShowDbModal(true);
     };
 
-    // Table info for sidebar
-    const tables = [
-        { name: 'Products', icon: Package, count: initialProducts.length },
-        { name: 'Customers', icon: Users, count: initialCustomers.length },
-        { name: 'Orders', icon: FileText, count: initialOrders.length },
-        { name: 'OrderDetails', icon: ShoppingCart, count: initialOrderDetails.length },
-        { name: 'Suppliers', icon: Truck, count: initialSuppliers.length },
-    ];
+    // ========== RENDER ==========
+    if (examMode === 'login') {
+        return (
+            <LoginScreen
+                userName={userName}
+                setUserName={setUserName}
+                onStartExam={handleStartExam}
+                examDuration={EXAM_DURATION_MINUTES}
+                exercises={exercises}
+            />
+        );
+    }
 
-    // Group exercises by category
-    const categories = [...new Set(exercises.map(ex => ex.category))];
+    if (examMode === 'pick-prize') {
+        return (
+            <PickPrizeScreen
+                prizes={prizes}
+                selectedPrize={selectedPrize}
+                isFlipping={isFlipping}
+                onPrizeSelect={handlePrizeSelect}
+            />
+        );
+    }
 
+    if (examMode === 'result') {
+        return (
+            <ResultScreen
+                userName={userName}
+                score={completedExercises.length}
+                total={exercises.length}
+                timeRemaining={timeRemaining}
+                examDurationMinutes={EXAM_DURATION_MINUTES}
+                selectedPrize={selectedPrize}
+                prizes={prizes}
+                onRestart={handleRestartExam}
+                onLogout={handleLogout}
+            />
+        );
+    }
+
+    // Exam Screen
     return (
-        <div className="min-h-screen flex text-slate-800 bg-gradient-to-br from-emerald-50 via-white to-teal-50">
-            {/* Sidebar */}
-            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 overflow-hidden shadow-xl z-20">
-                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-white/20 p-2.5 rounded-xl">
-                            <ShoppingCart size={26} />
-                        </div>
-                        <div>
-                            <h1 className="font-bold text-lg tracking-tight">Fresh Shop</h1>
-                            <p className="text-emerald-100 text-xs">SQL Practice - Cửa hàng thực phẩm</p>
-                        </div>
-                    </div>
+        <div className="min-h-screen flex text-slate-800 bg-slate-100">
+            <Sidebar
+                userName={userName}
+                timeRemaining={timeRemaining}
+                exercises={exercises}
+                completedExercises={completedExercises}
+                activeExercise={activeExercise}
+                selectedPrize={selectedPrize}
+                prizes={prizes}
+                onLogout={handleLogout}
+                onShowTable={showTable}
+                onExerciseClick={handleExerciseClick}
+                onEndExam={handleEndExam}
+            />
 
-                    {/* Tables Quick Access */}
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                        {tables.map(t => (
-                            <button
-                                key={t.name}
-                                onClick={() => showTable(t.name)}
-                                className="flex items-center gap-1 bg-white/15 hover:bg-white/25 px-2 py-1 rounded-md text-[10px] font-medium transition-colors"
-                                title={`Xem bảng ${t.name}`}
-                            >
-                                <t.icon size={10} />
-                                {t.name}
-                            </button>
-                        ))}
-                    </div>
+            <SqlWorkspace
+                activeExercise={activeExercise}
+                query={query}
+                setQuery={setQuery}
+                onRunQuery={runQuery}
+                resetDatabase={resetDatabase}
+                feedback={feedback}
+                showHint={showHint}
+                setShowHint={setShowHint}
+                error={error}
+                results={results}
+                onShowTable={showTable}
+            />
 
-                    <div className="flex items-center justify-between text-xs text-emerald-100 font-medium uppercase tracking-wider mt-4">
-                        <span>Tiến độ</span>
-                        <span>{completedExercises.length}/{exercises.length}</span>
-                    </div>
-                    <div className="w-full bg-emerald-900/30 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div
-                            className="bg-yellow-400 h-full transition-all duration-500"
-                            style={{ width: `${(completedExercises.length / exercises.length) * 100}%` }}
-                        ></div>
-                    </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-3 space-y-4 scroll-smooth">
-                    {categories.map((cat) => {
-                        const catExercises = exercises.filter(e => e.category === cat);
-                        if (catExercises.length === 0) return null;
-
-                        return (
-                            <div key={cat}>
-                                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">{cat}</h3>
-                                <div className="space-y-0.5">
-                                    {catExercises.map(ex => {
-                                        const isCompleted = completedExercises.includes(ex.id);
-                                        const isActive = activeExercise?.id === ex.id;
-
-                                        return (
-                                            <button
-                                                key={ex.id}
-                                                onClick={() => handleExerciseClick(ex)}
-                                                className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 flex items-start gap-2 group relative ${isActive
-                                                    ? 'bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-200'
-                                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                                    }`}
-                                            >
-                                                <div className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[8px] transition-colors ${isCompleted
-                                                    ? 'bg-emerald-500 text-white'
-                                                    : isActive ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
-                                                    }`}>
-                                                    {isCompleted ? <CheckCircle size={10} /> : ex.id}
-                                                </div>
-                                                <span className="line-clamp-2 pr-3 leading-tight">{ex.question}</span>
-                                                {isActive && <ChevronRight size={12} className="ml-auto absolute right-2 top-2.5 text-emerald-400" />}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <main className="flex-1 ml-80 p-5 max-w-7xl mx-auto flex flex-col h-screen overflow-hidden">
-
-                {/* Header / Question Area */}
-                <div className="mb-4 flex-shrink-0">
-                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                            <Code2 size={80} />
-                        </div>
-                        <div className="relative z-10 w-full">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide">
-                                        Câu {activeExercise?.id}
-                                    </span>
-                                    <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">
-                                        {activeExercise?.category}
-                                    </span>
-                                </div>
-                                {feedback && (
-                                    <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${feedback.type === 'success'
-                                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                        : 'bg-red-100 text-red-700 border border-red-200'
-                                        }`}>
-                                        {feedback.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                                        {feedback.message}
-                                    </div>
-                                )}
-                            </div>
-                            <h2 className="text-lg font-bold text-slate-800 leading-snug max-w-4xl mb-2">
-                                {activeExercise?.question || "Chọn một bài tập để bắt đầu"}
-                            </h2>
-
-                            {activeExercise?.hint && (
-                                <button
-                                    onClick={() => setShowHint(!showHint)}
-                                    className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1 transition-colors"
-                                >
-                                    <Lightbulb size={12} />
-                                    {showHint ? 'Ẩn gợi ý' : 'Xem gợi ý'}
-                                </button>
-                            )}
-                            {showHint && activeExercise?.hint && (
-                                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-mono">
-                                    💡 {activeExercise.hint}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Editor & Actions */}
-                <div className="flex flex-col flex-1 gap-3 min-h-0">
-
-                    <div className="flex flex-col gap-0 shadow-sm rounded-xl overflow-hidden border border-slate-300 bg-white flex-shrink-0">
-                        <div className="bg-slate-100 px-4 py-2 border-b border-slate-300 flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">SQL Editor</span>
-                            <button
-                                onClick={resetDatabase}
-                                className="text-xs flex items-center gap-1 text-slate-500 hover:text-red-600 transition-colors font-medium px-2 py-1 hover:bg-slate-200 rounded"
-                                title="Reset Database"
-                            >
-                                <RotateCcw size={12} /> Reset DB
-                            </button>
-                        </div>
-                        <div className="relative group">
-                            <textarea
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                className="w-full h-32 p-4 font-mono text-sm outline-none resize-none bg-[#1a1a2e] text-[#cdd6f4] selection:bg-emerald-500/50"
-                                spellCheck="false"
-                                placeholder="-- Viết câu lệnh SQL ở đây..."
-                            />
-                            <button
-                                onClick={() => runQuery(query)}
-                                className="absolute bottom-3 right-3 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-1.5 rounded-lg font-medium shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 active:scale-95 z-10 text-sm"
-                            >
-                                <Play size={14} fill="currentColor" /> Chạy Query
-                            </button>
-                        </div>
-                        <div className="bg-slate-50 px-4 py-1.5 border-t border-slate-200 flex justify-between items-center">
-                            <div className="flex gap-2">
-                                {tables.map(t => (
-                                    <button
-                                        key={t.name}
-                                        onClick={() => showTable(t.name)}
-                                        className="text-[10px] text-slate-400 hover:text-emerald-600 font-medium flex items-center gap-1 hover:underline underline-offset-2"
-                                    >
-                                        <t.icon size={10} />
-                                        {t.name}
-                                    </button>
-                                ))}
-                            </div>
-                            <span className="text-[10px] text-slate-400">5 bảng dữ liệu</span>
-                        </div>
-                    </div>
-
-                    {/* Results Area */}
-                    <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-0 overflow-hidden">
-
-                        {error ? (
-                            <div className="flex items-center justify-center p-6 text-red-500 gap-3 bg-red-50/50 h-full">
-                                <div className="p-2.5 bg-red-100 rounded-full">
-                                    <AlertCircle size={20} />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-red-700 text-sm">Lỗi Query</span>
-                                    <span className="font-mono text-xs">{error}</span>
-                                </div>
-                            </div>
-                        ) : results.length > 0 ? (
-                            <div className="flex flex-col h-full">
-                                <div className="bg-slate-50 px-4 py-1.5 border-b border-slate-200 flex justify-between items-center flex-shrink-0">
-                                    <span className="text-xs font-bold text-slate-500 flex items-center gap-2 uppercase tracking-wide">
-                                        Kết quả
-                                    </span>
-                                    <span className="text-xs font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">
-                                        {results.length} dòng
-                                    </span>
-                                </div>
-                                <div className="overflow-auto flex-1">
-                                    <table className="w-full text-left text-xs border-collapse">
-                                        <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                                            <tr>
-                                                {Object.keys(results[0]).map((key) => (
-                                                    <th key={key} className="p-2.5 border-b border-r border-slate-200 last:border-r-0 whitespace-nowrap bg-slate-50">
-                                                        {formatHeader(key)}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {results.map((row, i) => (
-                                                <tr key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 group">
-                                                    {Object.values(row).map((val: any, j) => (
-                                                        <td key={j} className="p-2.5 border-r border-slate-100 last:border-r-0 text-slate-600 group-hover:text-slate-800">
-                                                            {val === null ? <span className="text-slate-300 italic">NULL</span> : String(val)}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-3">
-                                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
-                                    <Database size={32} className="opacity-20" />
-                                </div>
-                                <p className="font-medium text-xs">Chạy query để xem kết quả</p>
-                            </div>
-                        )}
-                    </div>
-
-                </div>
-            </main>
-
-            {/* Database Modal */}
-            {showDbModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50">
-                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                <Database size={18} className="text-emerald-600" />
-                                Bảng {selectedTable} ({dbData.length} dòng)
-                            </h3>
-                            <div className="flex items-center gap-2">
-                                {tables.map(t => (
-                                    <button
-                                        key={t.name}
-                                        onClick={() => showTable(t.name)}
-                                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${selectedTable === t.name
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                                    >
-                                        {t.name}
-                                    </button>
-                                ))}
-                                <button
-                                    onClick={() => setShowDbModal(false)}
-                                    className="ml-2 p-1 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="overflow-auto p-0 flex-1">
-                            <table className="w-full text-left text-xs border-collapse">
-                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                                    <tr>
-                                        {dbData.length > 0 && Object.keys(dbData[0]).map((key) => (
-                                            <th key={key} className="p-2.5 border-b border-r border-slate-200 last:border-r-0 whitespace-nowrap bg-slate-50">
-                                                {formatHeader(key)}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {dbData.map((row: any, i: number) => (
-                                        <tr key={i} className="hover:bg-emerald-50/50 transition-colors border-b border-slate-100 last:border-0">
-                                            {Object.values(row).map((val: any, j: number) => (
-                                                <td key={j} className="p-2.5 border-r border-slate-100 last:border-r-0 text-slate-600">
-                                                    {val === null ? <span className="text-slate-300 italic">NULL</span> : String(val)}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-end">
-                            <button
-                                onClick={() => setShowDbModal(false)}
-                                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium text-xs transition-colors"
-                            >
-                                Đóng
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Welcome Modal - Cute Greeting */}
-            {showWelcome && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gradient-to-br from-pink-200/90 via-purple-200/90 to-indigo-200/90 backdrop-blur-md">
-                    <div className="bg-gradient-to-br from-white to-pink-50 rounded-3xl shadow-2xl p-8 text-center max-w-lg relative overflow-hidden animate-bounce-in border-4 border-pink-200">
-                        {/* Decorative elements */}
-                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            {/* Floating hearts */}
-                            <div className="absolute top-4 left-6 text-3xl animate-bounce" style={{ animationDelay: '0s' }}>💕</div>
-                            <div className="absolute top-6 right-8 text-2xl animate-bounce" style={{ animationDelay: '0.2s' }}>💖</div>
-                            <div className="absolute bottom-16 left-4 text-2xl animate-bounce" style={{ animationDelay: '0.4s' }}>�</div>
-                            <div className="absolute bottom-20 right-6 text-3xl animate-bounce" style={{ animationDelay: '0.1s' }}>✨</div>
-
-                            {/* Confetti */}
-                            <div className="absolute top-0 left-1/4 w-3 h-3 bg-pink-400 rounded-full animate-confetti-1"></div>
-                            <div className="absolute top-0 left-1/2 w-2 h-2 bg-purple-400 rounded-full animate-confetti-2"></div>
-                            <div className="absolute top-0 left-3/4 w-4 h-4 bg-indigo-300 rounded-full animate-confetti-3"></div>
-                            <div className="absolute top-0 left-1/3 w-2 h-2 bg-rose-400 rounded-full animate-confetti-4"></div>
-                            <div className="absolute top-0 right-1/4 w-3 h-3 bg-violet-400 rounded-full animate-confetti-5"></div>
-
-                            {/* Corner stars */}
-                            <div className="absolute top-2 left-2 text-xl">⭐</div>
-                            <div className="absolute top-2 right-2 text-xl">⭐</div>
-                            <div className="absolute bottom-2 left-2 text-xl">🌟</div>
-                            <div className="absolute bottom-2 right-2 text-xl">🌟</div>
-                        </div>
-
-                        <div className="relative z-10">
-                            {/* Cute emoji */}
-                            <div className="text-7xl mb-6">🥰</div>
-
-                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 mb-6 leading-relaxed">
-                                Giỏi thiệt sự luôn đóoo 🫶
-                                <br />
-                                Không phải ai cũng làm được đâu nha.
-                                <br />
-                                Thưởng cho c một cái ôm thật lâu nèee 🤍✨
-                                <br /><br />
-                                Tự hào ghê luôn á!
-                                <br />
-                                Cố gắng của c xứng đáng 10 điểm 💕
-                                <br />
-                                Giữ phong độ này nhaaa 🌟
-                            </h1>
-
-                            <button
-                                onClick={() => setShowWelcome(false)}
-                                className="px-8 py-3 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-lg shadow-lg shadow-purple-300/50 transition-all active:scale-95 border-2 border-white/50"
-                            >
-                                🥰 Ôkiiii �
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Celebration Modal */}
-            {showCelebration && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-                    <div className="bg-white rounded-3xl shadow-2xl p-10 text-center max-w-md relative overflow-hidden animate-bounce-in">
-                        {/* Confetti Background */}
-                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <div className="absolute top-0 left-1/4 w-3 h-3 bg-yellow-400 rounded-full animate-confetti-1"></div>
-                            <div className="absolute top-0 left-1/2 w-2 h-2 bg-pink-500 rounded-full animate-confetti-2"></div>
-                            <div className="absolute top-0 left-3/4 w-4 h-4 bg-emerald-400 rounded-full animate-confetti-3"></div>
-                            <div className="absolute top-0 left-1/3 w-2 h-2 bg-blue-500 rounded-full animate-confetti-4"></div>
-                            <div className="absolute top-0 right-1/4 w-3 h-3 bg-purple-500 rounded-full animate-confetti-5"></div>
-                            <div className="absolute top-0 left-10 w-2 h-2 bg-red-400 rounded-full animate-confetti-6"></div>
-                            <div className="absolute top-0 right-10 w-3 h-3 bg-orange-400 rounded-full animate-confetti-7"></div>
-                        </div>
-
-                        <div className="relative z-10">
-                            <div className="text-7xl mb-4 animate-bounce">🎉</div>
-                            <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 mb-3">
-                                Giỏi thiệt sự luôn đóoo 🫶 Không phải ai cũng làm được đâu nha. Thưởng cho c một cái ôm thật lâu nèee 🤍✨
-                                Tự hào ghê luôn á! Cố gắng của c xứng đáng 10 điểm không có nhưnggg 💕 Giữ phong độ này nhaaa 🌟
-                            </h2>
-                            <p className="text-slate-600 mb-6">
-                                Bạn đã hoàn thành tất cả <span className="font-bold text-emerald-600">30 câu hỏi</span>! 🌟
-                            </p>
-                            <div className="flex justify-center gap-3">
-                                <button
-                                    onClick={() => setShowCelebration(false)}
-                                    className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition-all active:scale-95"
-                                >
-                                    Tuyệt vời! 🚀
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <DatabaseModal
+                isOpen={showDbModal}
+                onClose={() => setShowDbModal(false)}
+                data={dbData}
+                tableName={selectedTable}
+            />
         </div>
     );
 }
