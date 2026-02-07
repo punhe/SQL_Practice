@@ -313,13 +313,13 @@ export const exercises: Exercise[] = [
     },
     {
         id: 28,
-        category: 'JOIN + MIN/MAX',
+        category: 'MIN/MAX + WHERE',
         question: 'Đơn hàng "Completed" có giá trị nhỏ/lớn nhất (min_order, max_order).',
         hint: 'SELECT MIN(...), MAX(...) WHERE status = ...',
-        expectedQuery: "SELECT MIN(Orders.total_amount) AS min_order, MAX(Orders.total_amount) AS max_order FROM Orders INNER JOIN Customers ON Orders.customer_id = Customers.customer_id WHERE Orders.status = 'Completed'",
+        expectedQuery: "SELECT MIN(total_amount) AS min_order, MAX(total_amount) AS max_order FROM Orders WHERE status = 'Completed'",
         expectedQueries: [
-            "SELECT MIN(o.total_amount) AS min_order, MAX(o.total_amount) AS max_order FROM Orders o JOIN Customers c ON o.customer_id = c.customer_id WHERE o.status = 'Completed'",
-            "SELECT MIN(o.total_amount) min_order, MAX(o.total_amount) max_order FROM Orders o JOIN Customers c ON o.customer_id = c.customer_id WHERE o.status = 'Completed'"
+            "SELECT MIN(Orders.total_amount) AS min_order, MAX(Orders.total_amount) AS max_order FROM Orders WHERE Orders.status = 'Completed'",
+            "SELECT MIN(total_amount) min_order, MAX(total_amount) max_order FROM Orders WHERE status = 'Completed'"
         ]
     },
 
