@@ -1,29 +1,18 @@
 
-import { BookOpen, LogOut, Timer, Package, Users, FileText, ShoppingCart, Truck, User, CheckCircle, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Package, Users, FileText, ShoppingCart, Truck, User, CheckCircle, ChevronRight, RotateCcw, Trophy, LogOut } from 'lucide-react';
 import { Exercise } from '../data';
 
-interface Prize {
-    id: number;
-    emoji: string;
-    name: string;
-    image?: string;
-}
-
 interface SidebarProps {
-    userName: string;
-    timeRemaining: number;
     exercises: Exercise[];
     completedExercises: number[];
     activeExercise: Exercise | null;
-    selectedPrize: number | null;
-    prizes: Prize[];
-    onLogout: () => void;
     onShowTable: (name: string) => void;
     onExerciseClick: (ex: Exercise) => void;
-    onEndExam: () => void;
+    onResetProgress: () => void;
+    userName: string;
+    onLogout: () => void;
 }
 
-// Table info
 const tables = [
     { name: 'Products', icon: Package },
     { name: 'Customers', icon: Users },
@@ -34,59 +23,53 @@ const tables = [
 ];
 
 export function Sidebar({
-    userName,
-    timeRemaining,
     exercises,
     completedExercises,
     activeExercise,
-    selectedPrize,
-    prizes,
-    onLogout,
     onShowTable,
     onExerciseClick,
-    onEndExam
+    onResetProgress,
+    userName,
+    onLogout
 }: SidebarProps) {
     const categories = [...new Set(exercises.map(ex => ex.category))];
-
-    // Format time
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
+    const progressPercent = Math.round((completedExercises.length / exercises.length) * 100);
 
     return (
         <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 overflow-hidden shadow-sm z-20">
-            {/* Header with Timer */}
-            <div className="p-4 border-b border-slate-200 bg-indigo-600 text-white">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 bg-gradient-to-br from-indigo-600 to-purple-700 text-white">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <div className="bg-white/20 p-2 rounded-lg">
                             <BookOpen size={20} />
                         </div>
                         <div>
-                            <h1 className="font-bold text-sm">SQL JOIN Exam</h1>
-                            <p className="text-indigo-200 text-[10px]">Xin chào, {userName}</p>
+                            <h1 className="font-bold text-sm">SQL Practice</h1>
+                            <p className="text-indigo-200 text-[10px]">Luyện tập truy vấn SQL</p>
                         </div>
+                    </div>
+                </div>
+
+                {/* User Info */}
+                <div className="flex items-center justify-between bg-white/10 rounded-lg px-3 py-2 mb-3">
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                            <User size={12} />
+                        </div>
+                        <span className="text-xs font-medium truncate max-w-[140px]">{userName}</span>
                     </div>
                     <button
                         onClick={onLogout}
-                        className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                        title="Lưu & Thoát"
+                        className="text-white/70 hover:text-white hover:bg-white/10 p-1.5 rounded-md transition-colors"
+                        title="Đổi tài khoản"
                     >
-                        <LogOut size={16} />
+                        <LogOut size={14} />
                     </button>
                 </div>
 
-                {/* Timer */}
-                <div className={`flex items-center justify-center gap-2 py-3 rounded-lg font-mono text-2xl font-bold ${timeRemaining <= 300 ? 'bg-red-500 animate-pulse' : 'bg-white/10'
-                    }`}>
-                    <Timer size={20} className={timeRemaining <= 300 ? 'text-white' : 'text-indigo-200'} />
-                    <span>{formatTime(timeRemaining)}</span>
-                </div>
-
                 {/* Tables Quick Access */}
-                <div className="flex flex-wrap gap-1 mt-3">
+                <div className="flex flex-wrap gap-1 mb-3">
                     {tables.map(t => (
                         <button
                             key={t.name}
@@ -100,42 +83,16 @@ export function Sidebar({
                 </div>
 
                 {/* Progress */}
-                <div className="flex items-center justify-between text-xs text-indigo-200 font-medium mt-3">
-                    <span>Tiến độ</span>
-                    <span className="font-bold text-white">{completedExercises.length}/{exercises.length}</span>
+                <div className="flex items-center justify-between text-xs text-indigo-200 font-medium">
+                    <span className="flex items-center gap-1"><Trophy size={12} /> Tiến độ</span>
+                    <span className="font-bold text-white">{completedExercises.length}/{exercises.length} ({progressPercent}%)</span>
                 </div>
                 <div className="w-full bg-white/20 h-2 rounded-full mt-1.5 overflow-hidden">
                     <div
                         className="bg-green-400 h-full transition-all duration-500"
-                        style={{ width: `${(completedExercises.length / exercises.length) * 100}%` }}
+                        style={{ width: `${progressPercent}%` }}
                     ></div>
                 </div>
-
-                {/* Prize Preview - Blur based on progress */}
-                {selectedPrize && (
-                    <div className="mt-3 bg-white/10 rounded-lg p-3">
-                        <p className="text-[10px] text-indigo-200 mb-2">🎁 Phần quà của bạn</p>
-                        <div
-                            className="flex items-center justify-center py-2 rounded-lg bg-white/10 transition-all duration-500 overflow-hidden"
-                            style={{
-                                filter: `blur(${Math.max(0, 8 - (completedExercises.length / exercises.length) * 8)}px)`,
-                            }}
-                        >
-                            {(() => {
-                                const prize = prizes.find(p => p.id === selectedPrize);
-                                return prize ? (
-                                    <img src={prize.image} alt="Prize" className="w-12 h-12 object-contain" />
-                                ) : null;
-                            })()}
-                        </div>
-                        <p className="text-[10px] text-indigo-200 mt-1 text-center">
-                            {completedExercises.length >= exercises.length
-                                ? '✨ Đã mở khóa!'
-                                : `Trả lời đúng để mở khóa (${completedExercises.length}/${exercises.length})`
-                            }
-                        </p>
-                    </div>
-                )}
             </div>
 
             {/* Exercise List */}
@@ -143,10 +100,14 @@ export function Sidebar({
                 {categories.map((cat) => {
                     const catExercises = exercises.filter(e => e.category === cat);
                     if (catExercises.length === 0) return null;
+                    const completedInCat = catExercises.filter(e => completedExercises.includes(e.id)).length;
 
                     return (
                         <div key={cat}>
-                            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">{cat}</h3>
+                            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2 flex items-center justify-between">
+                                <span>{cat}</span>
+                                <span className="text-[9px] font-mono text-slate-300">{completedInCat}/{catExercises.length}</span>
+                            </h3>
                             <div className="space-y-0.5">
                                 {catExercises.map(ex => {
                                     const isCompleted = completedExercises.includes(ex.id);
@@ -179,13 +140,13 @@ export function Sidebar({
             </div>
 
             {/* Actions */}
-            <div className="p-3 border-t border-slate-200 bg-slate-50 space-y-2">
+            <div className="p-3 border-t border-slate-200 bg-slate-50">
                 <button
-                    onClick={onEndExam}
-                    className="w-full py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                    onClick={onResetProgress}
+                    className="w-full py-2 text-xs text-slate-500 hover:text-red-600 font-medium flex items-center justify-center gap-1.5 hover:bg-slate-100 rounded-lg transition-colors"
                 >
-                    <CheckCircle2 size={16} />
-                    Nộp bài
+                    <RotateCcw size={12} />
+                    Đặt lại tiến độ
                 </button>
             </div>
         </aside>
